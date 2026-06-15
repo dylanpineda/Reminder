@@ -2,7 +2,10 @@ package com.example.postitapp.ui.main
 
 import android.app.Application
 import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -75,6 +78,7 @@ fun MainScreen(
                         onToggle = { viewModel.toggleItem(it) },
                         onDelete = { viewModel.deleteItem(it) },
                         onAdd = { viewModel.addItem(it) },
+                        onEdit = { id, text -> viewModel.editItem(id, text) },
                         onItemClick = onItemClick
                     )
                 }
@@ -96,6 +100,7 @@ fun MainScreenContent(
     onToggle: (String) -> Unit,
     onDelete: (String) -> Unit,
     onAdd: (String) -> Unit,
+    onEdit: (String, String) -> Unit,
     onItemClick: (NavKey) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
@@ -157,7 +162,7 @@ fun MainScreenContent(
                         item = item,
                         onToggle = { onToggle(item.id) },
                         onDelete = { itemToDelete = item },
-                        onItemClick = { /* No-op for now as there are no other NavKeys */ }
+                        onEdit = { newText -> onEdit(item.id, newText) }
                     )
                 }
             }
@@ -226,46 +231,102 @@ fun TodoItemRow(
     item: TodoItem,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
-    onItemClick: () -> Unit
+    onEdit: (String) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1E1E24))
-            .clickable { onToggle() }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(
-            checked = item.isChecked,
-            onCheckedChange = { onToggle() },
-            colors = CheckboxDefaults.colors(
-                checkedColor = MaterialTheme.colorScheme.primary,
-                uncheckedColor = Color.Gray
-            )
+    var showMenu by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editText by remember { mutableStateOf(item.text) }
+
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Editar tarea", color = Color.White) },
+            text = {
+                TextField(
+                    value = editText,
+                    onValueChange = { editText = it },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (editText.isNotBlank()) {
+                            onEdit(editText)
+                            showEditDialog = false
+                        }
+                    }
+                ) {
+                    Text("Guardar", color = MaterialTheme.colorScheme.primary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancelar", color = Color.Gray)
+                }
+            },
+            containerColor = Color(0xFF1E1E24)
         )
+    }
 
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Text(
-            text = item.text,
-            modifier = Modifier.weight(1f),
-            color = if (item.isChecked) Color.Gray else Color.White,
-            style = MaterialTheme.typography.bodyLarge.copy(
-                textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None
-            )
-        )
-
-        IconButton(
-            onClick = onDelete,
-            colors = IconButtonDefaults.iconButtonColors(
-                contentColor = Color(0xFFEF5350)
-            )
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF1E1E24))
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = LocalIndication.current,
+                    onClick = { onToggle() },
+                    onLongClick = { showMenu = true }
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Delete,
-                contentDescription = "Eliminar tarea"
+            Checkbox(
+                checked = item.isChecked,
+                onCheckedChange = { onToggle() },
+                colors = CheckboxDefaults.colors(
+                    checkedColor = MaterialTheme.colorScheme.primary,
+                    uncheckedColor = Color.Gray
+                )
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Text(
+                text = item.text,
+                modifier = Modifier.weight(1f),
+                color = if (item.isChecked) Color.Gray else Color.White,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None
+                )
+            )
+        }
+
+        DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false },
+            modifier = Modifier.background(Color(0xFF1E1E24))
+        ) {
+            DropdownMenuItem(
+                text = { Text("Editar", color = Color.White) },
+                onClick = {
+                    showMenu = false
+                    showEditDialog = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Eliminar", color = MaterialTheme.colorScheme.error) },
+                onClick = {
+                    showMenu = false
+                    onDelete()
+                }
             )
         }
     }

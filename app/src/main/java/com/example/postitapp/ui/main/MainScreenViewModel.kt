@@ -34,6 +34,12 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun deleteItem(id: String) {
         repository.deleteItem(id)
     }
+
+    fun editItem(id: String, newText: String) {
+        if (newText.isNotBlank()) {
+            repository.editItem(id, newText.trim())
+        }
+    }
 }
 
 sealed interface MainScreenUiState {

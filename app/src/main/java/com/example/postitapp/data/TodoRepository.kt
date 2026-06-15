@@ -68,6 +68,13 @@ class TodoRepository private constructor(private val context: Context) {
         updateList(updated)
     }
 
+    fun editItem(id: String, newText: String) {
+        val updated = _todoItems.value.map {
+            if (it.id == id) it.copy(text = newText) else it
+        }
+        updateList(updated)
+    }
+
     fun updateFromSync(newList: List<TodoItem>) {
         saveItemsToSharedPrefs(newList)
         _todoItems.value = newList
