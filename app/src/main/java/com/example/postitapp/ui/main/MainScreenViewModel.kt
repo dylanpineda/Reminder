@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.postitapp.data.TodoItem
 import com.example.postitapp.data.TodoRepository
+import com.example.postitapp.data.ColorPalette
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -20,6 +21,17 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = MainScreenUiState.Loading
         )
+
+    val selectedPalette: StateFlow<ColorPalette> = repository.selectedPalette
+    val customPalette: StateFlow<ColorPalette> = repository.customPalette
+
+    fun updatePalette(palette: ColorPalette) {
+        repository.updatePalette(palette)
+    }
+
+    fun updateCustomPalette(palette: ColorPalette) {
+        repository.updateCustomPalette(palette)
+    }
 
     fun addItem(text: String) {
         if (text.isNotBlank()) {
@@ -41,6 +53,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 }
+
 
 sealed interface MainScreenUiState {
     data object Loading : MainScreenUiState

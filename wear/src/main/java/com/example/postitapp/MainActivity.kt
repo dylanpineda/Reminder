@@ -9,11 +9,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.IndicationNodeFactory
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import android.app.RemoteInput
 import androidx.compose.ui.graphics.Color
@@ -42,22 +45,17 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.wear.compose.material.dialog.Alert
 import androidx.wear.compose.material.dialog.Dialog
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import com.example.postitapp.data.TodoItem
 import com.example.postitapp.data.TodoRepository
-
-data class ColorPalette(
-    val name: String,
-    val background: Color,
-    val chip: Color
-)
+import com.example.postitapp.data.ColorPalette
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,49 +65,60 @@ class MainActivity : ComponentActivity() {
         setContent {
             val palettes = remember {
                 listOf(
-                    ColorPalette("Negro", Color(0xFF000000), Color(0xFF2C2C2C)),
-                    ColorPalette("Azul", Color(0xFF0D1B2A), Color(0xFF1B263B)),
-                    ColorPalette("Verde", Color(0xFF112211), Color(0xFF1A3D2B)),
-                    ColorPalette("Rojo", Color(0xFF240A0A), Color(0xFF4A1A1A)),
-                    ColorPalette("Púrpura", Color(0xFF160A24), Color(0xFF381A4A)),
-                    ColorPalette("Naranja", Color(0xFF24140A), Color(0xFF4A2B1A))
+                    ColorPalette("Negro", Color(0xFF000000), Color(0xFF2C2C2C), Color(0xFFFFFFFF)),
+                    ColorPalette("Azul", Color(0xFF0D1B2A), Color(0xFF1B263B), Color(0xFFFFFFFF)),
+                    ColorPalette("Verde", Color(0xFF112211), Color(0xFF1A3D2B), Color(0xFFFFFFFF)),
+                    ColorPalette("Rojo", Color(0xFF240A0A), Color(0xFF4A1A1A), Color(0xFFFFFFFF)),
+                    ColorPalette("Púrpura", Color(0xFF160A24), Color(0xFF381A4A), Color(0xFFFFFFFF)),
+                    ColorPalette("Naranja", Color(0xFF24140A), Color(0xFF4A2B1A), Color(0xFFFFFFFF))
                 )
             }
-            var customPalette by remember {
-                mutableStateOf(ColorPalette("Personalizado", Color(0xFF0F172A), Color(0xFF1E293B)))
+            val selectedPalette by repository.selectedPalette.collectAsState()
+            val customPalette by repository.customPalette.collectAsState()
+
+            val backgroundModifier = if (selectedPalette.name == "Negro") {
+                Modifier.background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF3B0000), Color(0xFF000000))
+                    )
+                )
+            } else {
+                Modifier.background(selectedPalette.background)
             }
-            var selectedPalette by remember { mutableStateOf(palettes[0]) }
 
             MaterialTheme(
                 colors = MaterialTheme.colors.copy(
                     background = selectedPalette.background,
-                    surface = selectedPalette.chip
+                    surface = selectedPalette.chip,
+                    onBackground = selectedPalette.textColor,
+                    onSurface = selectedPalette.textColor
                 )
             ) {
-                Scaffold(
-                    timeText = { TimeText() }
+                CompositionLocalProvider(
+                    LocalIndication provides NoRippleIndication
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colors.background)
+                    Scaffold(
+                        timeText = { TimeText() }
                     ) {
-                        val items by repository.todoItems.collectAsState()
-                        WatchScreen(
-                            items = items,
-                            onToggle = { repository.toggleItem(it) },
-                            onAdd = { repository.addItem(it) },
-                            onDelete = { repository.deleteItem(it) },
-                            onEdit = { id, text -> repository.editItem(id, text) },
-                            palettes = palettes,
-                            customPalette = customPalette,
-                            currentPalette = selectedPalette,
-                            onPaletteChange = { selectedPalette = it },
-                            onCustomPaletteChange = { newPalette ->
-                                customPalette = newPalette
-                                selectedPalette = newPalette
-                            }
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(backgroundModifier)
+                        ) {
+                            val items by repository.todoItems.collectAsState()
+                            WatchScreen(
+                                items = items,
+                                onToggle = { repository.toggleItem(it) },
+                                onAdd = { repository.addItem(it) },
+                                onDelete = { repository.deleteItem(it) },
+                                onEdit = { id, text -> repository.editItem(id, text) },
+                                palettes = palettes,
+                                customPalette = customPalette,
+                                currentPalette = selectedPalette,
+                                onPaletteChange = { repository.updatePalette(it) },
+                                onCustomPaletteChange = { repository.updateCustomPalette(it) }
+                            )
+                        }
                     }
                 }
             }
@@ -121,6 +130,20 @@ fun getHSV(color: Color): FloatArray {
     val hsv = FloatArray(3)
     android.graphics.Color.colorToHSV(color.toArgb(), hsv)
     return hsv
+}
+
+object NoRippleIndication : IndicationNodeFactory {
+    override fun create(interactionSource: InteractionSource): DelegatableNode {
+        return object : Modifier.Node() {}
+    }
+
+    override fun equals(other: Any?): Boolean {
+        return other === this
+    }
+
+    override fun hashCode(): Int {
+        return System.identityHashCode(this)
+    }
 }
 
 @Composable
@@ -203,10 +226,70 @@ fun WatchScreen(
     var itemToDelete by remember { mutableStateOf<TodoItem?>(null) }
     var showColorPicker by remember { mutableStateOf(false) }
 
-    val initialHsv = remember(customPalette) { getHSV(customPalette.chip) }
-    var pickerHue by remember(showColorPicker) { mutableStateOf(initialHsv[0]) }
-    var pickerSaturation by remember(showColorPicker) { mutableStateOf(initialHsv[1]) }
-    var pickerValue by remember(showColorPicker) { mutableStateOf((initialHsv[2] / 0.55f).coerceIn(0f, 1f)) }
+    val dialogBgModifier = if (currentPalette.name == "Negro") {
+        Modifier.background(
+            Brush.verticalGradient(
+                colors = listOf(Color(0xFF3B0000), Color(0xFF000000))
+            )
+        )
+    } else {
+        Modifier.background(currentPalette.background)
+    }
+
+    val initialBgHsv = remember(customPalette) { getHSV(customPalette.background) }
+    var bgHue by remember(showColorPicker) { mutableStateOf(initialBgHsv[0]) }
+    var bgSat by remember(showColorPicker) { mutableStateOf(initialBgHsv[1]) }
+    var bgVal by remember(showColorPicker) { mutableStateOf(initialBgHsv[2]) }
+
+    val initialChipHsv = remember(customPalette) { getHSV(customPalette.chip) }
+    var chipHue by remember(showColorPicker) { mutableStateOf(initialChipHsv[0]) }
+    var chipSat by remember(showColorPicker) { mutableStateOf(initialChipHsv[1]) }
+    var chipVal by remember(showColorPicker) { mutableStateOf(initialChipHsv[2]) }
+
+    val initialTextHsv = remember(customPalette) { getHSV(customPalette.textColor) }
+    var textHue by remember(showColorPicker) { mutableStateOf(initialTextHsv[0]) }
+    var textSat by remember(showColorPicker) { mutableStateOf(initialTextHsv[1]) }
+    var textVal by remember(showColorPicker) { mutableStateOf(initialTextHsv[2]) }
+
+    var activeTab by remember(showColorPicker) { mutableStateOf(0) } // 0: Bg, 1: Chip, 2: Text
+
+    val pickerHue = when (activeTab) {
+        0 -> bgHue
+        1 -> chipHue
+        else -> textHue
+    }
+    val pickerSaturation = when (activeTab) {
+        0 -> bgSat
+        1 -> chipSat
+        else -> textSat
+    }
+    val pickerValue = when (activeTab) {
+        0 -> bgVal
+        1 -> chipVal
+        else -> textVal
+    }
+
+    val onHueChange: (Float) -> Unit = { newVal ->
+        when (activeTab) {
+            0 -> bgHue = newVal
+            1 -> chipHue = newVal
+            else -> textHue = newVal
+        }
+    }
+    val onSatChange: (Float) -> Unit = { newVal ->
+        when (activeTab) {
+            0 -> bgSat = newVal
+            1 -> chipSat = newVal
+            else -> textSat = newVal
+        }
+    }
+    val onValChange: (Float) -> Unit = { newVal ->
+        when (activeTab) {
+            0 -> bgVal = newVal
+            1 -> chipVal = newVal
+            else -> textVal = newVal
+        }
+    }
 
     var itemForMenu by remember { mutableStateOf<TodoItem?>(null) }
     var itemToEdit by remember { mutableStateOf<TodoItem?>(null) }
@@ -247,6 +330,7 @@ fun WatchScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .then(dialogBgModifier)
                 .padding(horizontal = 12.dp, vertical = 6.dp)
                 .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -307,6 +391,7 @@ fun WatchScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .then(dialogBgModifier)
                 .padding(horizontal = 8.dp, vertical = 4.dp)
                 .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -318,9 +403,29 @@ fun WatchScreen(
                 textAlign = TextAlign.Center
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf("Bg", "Card", "Txt").forEachIndexed { index, label ->
+                    val isSelected = activeTab == index
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) MaterialTheme.colors.primary else Color(0xFF333333))
+                            .clickable { activeTab = index }
+                            .padding(vertical = 4.dp, horizontal = 8.dp)
+                    ) {
+                        Text(label, style = MaterialTheme.typography.caption2, color = Color.White)
+                    }
+                }
+            }
+
             // Preview card
-            val previewBg = Color.hsv(pickerHue, pickerSaturation, (pickerValue * 0.25f).coerceAtLeast(0.02f))
-            val previewChip = Color.hsv(pickerHue, pickerSaturation * 0.8f, (pickerValue * 0.55f).coerceAtLeast(0.12f))
+            val previewBg = Color.hsv(bgHue, bgSat, bgVal)
+            val previewChip = Color.hsv(chipHue, chipSat, chipVal)
+            val previewText = Color.hsv(textHue, textSat, textVal)
             Box(
                 modifier = Modifier
                     .fillMaxWidth(0.9f)
@@ -344,7 +449,7 @@ fun WatchScreen(
                         Text(
                             text = "Ejemplo",
                             style = MaterialTheme.typography.caption2,
-                            color = Color.White
+                            color = previewText
                         )
                         Box(
                             modifier = Modifier
@@ -360,7 +465,7 @@ fun WatchScreen(
             // Custom Hue Spectrum Picker
             HueSpectrumPicker(
                 hue = pickerHue,
-                onHueChange = { pickerHue = it },
+                onHueChange = onHueChange,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 2.dp)
@@ -373,6 +478,29 @@ fun WatchScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(vertical = 2.dp)
             ) {
+                // White preset circle
+                val isWhiteSelected = pickerSaturation == 0f && pickerValue == 1f
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            onSatChange(0f)
+                            onValChange(1f)
+                        }
+                        .then(
+                            if (isWhiteSelected) {
+                                Modifier.border(1.5.dp, Color.Black, CircleShape)
+                            } else {
+                                Modifier
+                            }
+                        )
+                )
+
                 presetHues.forEach { presetHue ->
                     val color = Color.hsv(presetHue, pickerSaturation, pickerValue)
                     Box(
@@ -384,7 +512,7 @@ fun WatchScreen(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) {
-                                pickerHue = presetHue
+                                onHueChange(presetHue)
                             }
                             .then(
                                 if (pickerHue == presetHue) {
@@ -406,7 +534,7 @@ fun WatchScreen(
             )
             InlineSlider(
                 value = pickerSaturation,
-                onValueChange = { pickerSaturation = it },
+                onValueChange = onSatChange,
                 valueRange = 0f..1f,
                 steps = 10,
                 increaseIcon = { Icon(InlineSliderDefaults.Increase, contentDescription = "Aumentar") },
@@ -421,7 +549,7 @@ fun WatchScreen(
             )
             InlineSlider(
                 value = pickerValue,
-                onValueChange = { pickerValue = it },
+                onValueChange = onValChange,
                 valueRange = 0f..1f,
                 steps = 10,
                 increaseIcon = { Icon(InlineSliderDefaults.Increase, contentDescription = "Aumentar") },
@@ -450,13 +578,12 @@ fun WatchScreen(
 
                 Button(
                     onClick = {
-                        val newBg = Color.hsv(pickerHue, pickerSaturation, (pickerValue * 0.25f).coerceAtLeast(0.02f))
-                        val newChip = Color.hsv(pickerHue, pickerSaturation * 0.8f, (pickerValue * 0.55f).coerceAtLeast(0.12f))
                         onCustomPaletteChange(
                             ColorPalette(
                                 name = "Personalizado",
-                                background = newBg,
-                                chip = newChip
+                                background = previewBg,
+                                chip = previewChip,
+                                textColor = previewText
                             )
                         )
                         showColorPicker = false
@@ -558,7 +685,15 @@ fun WatchScreen(
                             modifier = Modifier
                                 .size(10.dp)
                                 .clip(CircleShape)
-                                .background(palette.background)
+                                .background(
+                                    Brush.verticalGradient(
+                                        if (palette.name == "Negro") {
+                                            listOf(Color(0xFF3B0000), Color(0xFF000000))
+                                        } else {
+                                            listOf(palette.background, palette.background)
+                                        }
+                                    )
+                                )
                         )
                     }
                 }
@@ -618,32 +753,12 @@ fun WatchScreen(
             }
         }
 
-        item {
-            Chip(
-                onClick = {
-                    val intent = RemoteInputIntentHelper.createActionRemoteInputIntent()
-                    val remoteInputs = listOf(
-                        RemoteInput.Builder("input_key")
-                            .setLabel("Nueva tarea")
-                            .build()
-                      )
-                      RemoteInputIntentHelper.putRemoteInputsExtra(intent, remoteInputs)
-                      launcher.launch(intent)
-                },
-                label = { Text("Nueva tarea") },
-                icon = { Icon(Icons.Default.Add, contentDescription = "Agregar") },
-                colors = ChipDefaults.chipColors(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-            )
-        }
-
         if (items.isEmpty()) {
             item {
                 Text(
                     text = "No hay tareas\nAgregalas aqui o en el telefono",
                     textAlign = TextAlign.Center,
+                    color = currentPalette.textColor,
                     style = MaterialTheme.typography.body2,
                     modifier = Modifier.padding(top = 16.dp, start = 8.dp, end = 8.dp)
                 )
@@ -674,7 +789,9 @@ fun WatchScreen(
                             checkedStartBackgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.5f),
                             checkedEndBackgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.5f),
                             uncheckedStartBackgroundColor = MaterialTheme.colors.surface,
-                            uncheckedEndBackgroundColor = MaterialTheme.colors.surface
+                            uncheckedEndBackgroundColor = MaterialTheme.colors.surface,
+                            uncheckedContentColor = currentPalette.textColor,
+                            checkedContentColor = Color.Gray
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -687,8 +804,6 @@ fun WatchScreen(
                             .matchParentSize()
                             .clip(MaterialTheme.shapes.medium)
                             .combinedClickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = LocalIndication.current,
                                 onClick = { onToggle(item.id) },
                                 onLongClick = { itemForMenu = item }
                             )

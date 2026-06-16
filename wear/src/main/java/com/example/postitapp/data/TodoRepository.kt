@@ -2,6 +2,8 @@ package com.example.postitapp.data
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.CoroutineScope
@@ -20,8 +22,19 @@ class TodoRepository private constructor(private val context: Context) {
     val todoItems: StateFlow<List<TodoItem>> = _todoItems.asStateFlow()
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    private val _selectedPalette = MutableStateFlow(
+        ColorPalette("Negro", Color(0xFF000000), Color(0xFF2C2C2C), Color(0xFFFFFFFF))
+    )
+    val selectedPalette: StateFlow<ColorPalette> = _selectedPalette.asStateFlow()
+
+    private val _customPalette = MutableStateFlow(
+        ColorPalette("Personalizado", Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFFFFFFFF))
+    )
+    val customPalette: StateFlow<ColorPalette> = _customPalette.asStateFlow()
+
     init {
         loadItems()
+        loadTheme()
     }
 
     private fun loadItems() {
@@ -36,6 +49,59 @@ class TodoRepository private constructor(private val context: Context) {
         } else {
             _todoItems.value = emptyList()
         }
+    }
+
+    private fun loadTheme() {
+        val selectedName = sharedPrefs.getString("selected_palette_name", "Negro")
+        val selectedBg = sharedPrefs.getInt("selected_palette_bg", 0xFF000000.toInt())
+        val selectedChip = sharedPrefs.getInt("selected_palette_chip", 0xFF2C2C2C.toInt())
+        val selectedText = sharedPrefs.getInt("selected_palette_text", 0xFFFFFFFF.toInt())
+        _selectedPalette.value = ColorPalette(selectedName ?: "Negro", Color(selectedBg), Color(selectedChip), Color(selectedText))
+
+        val customBg = sharedPrefs.getInt("custom_palette_bg", 0xFF0F172A.toInt())
+        val customChip = sharedPrefs.getInt("custom_palette_chip", 0xFF1E293B.toInt())
+        val customText = sharedPrefs.getInt("custom_palette_text", 0xFFFFFFFF.toInt())
+        _customPalette.value = ColorPalette("Personalizado", Color(customBg), Color(customChip), Color(customText))
+    }
+
+    fun updatePalette(palette: ColorPalette) {
+        _selectedPalette.value = palette
+        sharedPrefs.edit().apply {
+            putString("selected_palette_name", palette.name)
+            putInt("selected_palette_bg", palette.background.toArgb())
+            putInt("selected_palette_chip", palette.chip.toArgb())
+            putInt("selected_palette_text", palette.textColor.toArgb())
+        }.apply()
+        syncThemeToPhone(palette, _customPalette.value)
+    }
+
+    fun updateCustomPalette(palette: ColorPalette) {
+        _customPalette.value = palette
+        _selectedPalette.value = palette
+        sharedPrefs.edit().apply {
+            putString("selected_palette_name", palette.name)
+            putInt("selected_palette_bg", palette.background.toArgb())
+            putInt("selected_palette_chip", palette.chip.toArgb())
+            putInt("selected_palette_text", palette.textColor.toArgb())
+            putInt("custom_palette_bg", palette.background.toArgb())
+            putInt("custom_palette_chip", palette.chip.toArgb())
+            putInt("custom_palette_text", palette.textColor.toArgb())
+        }.apply()
+        syncThemeToPhone(palette, palette)
+    }
+
+    fun updateThemeFromSync(selected: ColorPalette, custom: ColorPalette) {
+        _selectedPalette.value = selected
+        _customPalette.value = custom
+        sharedPrefs.edit().apply {
+            putString("selected_palette_name", selected.name)
+            putInt("selected_palette_bg", selected.background.toArgb())
+            putInt("selected_palette_chip", selected.chip.toArgb())
+            putInt("selected_palette_text", selected.textColor.toArgb())
+            putInt("custom_palette_bg", custom.background.toArgb())
+            putInt("custom_palette_chip", custom.chip.toArgb())
+            putInt("custom_palette_text", custom.textColor.toArgb())
+        }.apply()
     }
 
     fun toggleItem(id: String) {
@@ -99,6 +165,29 @@ class TodoRepository private constructor(private val context: Context) {
             }
         }
     }
+
+    private fun syncThemeToPhone(selected: ColorPalette, custom: ColorPalette) {
+        scope.launch {
+            try {
+                val putDataMapReq = PutDataMapRequest.create("/theme").apply {
+                    dataMap.putString("selected_name", selected.name)
+                    dataMap.putInt("selected_bg", selected.background.toArgb())
+                    dataMap.putInt("selected_chip", selected.chip.toArgb())
+                    dataMap.putInt("selected_text", selected.textColor.toArgb())
+                    dataMap.putInt("custom_bg", custom.background.toArgb())
+                    dataMap.putInt("custom_chip", custom.chip.toArgb())
+                    dataMap.putInt("custom_text", custom.textColor.toArgb())
+                    dataMap.putLong("timestamp", System.currentTimeMillis())
+                }
+                val putDataReq = putDataMapReq.asPutDataRequest().setUrgent()
+                Wearable.getDataClient(context).putDataItem(putDataReq)
+                Log.d("TodoRepository", "Successfully synced theme to Phone")
+            } catch (e: Exception) {
+                Log.e("TodoRepository", "Error syncing theme to Phone", e)
+            }
+        }
+    }
+
 
     companion object {
         @Volatile

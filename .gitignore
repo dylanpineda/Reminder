@@ -31,3 +31,8 @@ output-metadata.json
 
 # Android Profiling
 *.hprof
+
+# Agents files
+.agents/
+.agent/
+
